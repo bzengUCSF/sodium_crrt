@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sodium Kinetics Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .active-eq {
+            border-left: 4px solid #3b82f6;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            background-color: #f8fafc;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            opacity: 1;
+        }
+        .inactive-eq {
+            border-left: 4px solid transparent;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease;
+            opacity: 0.5;
+        }
+        
+        /* Interactive Tour CSS */
+        .tour-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(2px);
+            z-index: 40;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .tour-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .tour-highlight {
+            position: relative;
+            z-index: 50 !important;
+            background-color: white;
+            box-shadow: 0 0 0 4px #3b82f6, 0 10px 25px rgba(59, 130, 246, 0.4) !important;
+            border-radius: 0.5rem;
+            pointer-events: auto !important;
+            transition: box-shadow 0.3s ease, transform 0.3s ease;
+            transform: scale(1.01);
+        }
+    </style>
+</head>
+<body class="bg-slate-100 p-4 md:p-8 font-sans text-slate-800">
+
+    <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-lg p-6 relative">
+        
+        <!-- Header & Info Icon -->
+        <div class="flex justify-between items-center mb-6 border-b pb-4">
+            <h1 class="text-2xl font-bold text-slate-800">CRRT Sodium Kinetics Simulator</h1>
+            
+            <!-- Interactive Tour Button -->
+            <button onclick="startTour()" class="text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-2 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg font-bold shadow-sm ring-1 ring-blue-200">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                Interactive Guide
+            </button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Control Panel -->
+            <div id="control-panel" class="lg:col-span-1 space-y-5 bg-slate-50 p-5 rounded-lg border border-slate-200 max-h-[85vh] overflow-y-auto">
+                <h2 class="text-lg font-semibold border-b pb-2 sticky top-0 bg-slate-50 z-10">Parameters</h2>
+                
+                <!-- Input Group: Volume -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <div class="flex items-center gap-1 relative group">
+                            <label class="text-sm font-medium">Vol of Distribution (V)</label>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 hover:text-blue-500 transition-colors cursor-help"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                            <div class="absolute bottom-full left-0 mb-2 w-56 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 z-50">
+                                Total body water. Acts as "inertia"—larger volumes slow the rate of sodium change.
+                            </div>
+                        </div>
+                        <span class="text-sm font-bold text-blue-600"><input type="number" id="v-num" value="45" class="w-16 text-right border rounded px-1" oninput="updateVal('v', true)"> L</span>
+                    </div>
+                    <input type="range" id="v" min="20" max="100" step="1" value="45" class="w-full" oninput="updateVal('v', false)">
+                </div>
+
+                <!-- Input Group: Initial Na -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <div class="flex items-center gap-1 relative group">
+                            <label class="text-sm font-medium">Initial Sodium (Na₀)</label>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 hover:text-blue-500 transition-colors cursor-help"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                            <div class="absolute bottom-full left-0 mb-2 w-56 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 z-50">
+                                The patient's starting serum sodium concentration prior to the simulation.
+                            </div>
+                        </div>
+                        <span class="text-sm font-bold text-blue-600"><input type="number" id="na0-num" value="120" class="w-16 text-right border rounded px-1" oninput="updateVal('na0', true)"> mEq/L</span>
+                    </div>
+                    <input type="range" id="na0" min="100" max="170" step="1" value="120" class="w-full" oninput="updateVal('na0', false)">
+                </div>
+
+                <!-- Input Group: Infusion Rate -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <div class="flex items-center gap-1 relative group">
+                            <label class="text-sm font-medium">Primary Infusion Rate (R)</label>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 hover:text-blue-500 transition-colors cursor-help"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                            <div class="absolute bottom-full left-0 mb-2 w-56 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 z-50">
+                                Continuous IV infusion rate of saline (e.g., 3% Hypertonic Saline).
+                            </div>
+                        </div>
+                        <span class="text-sm font-bold text-blue-600"><input type="number" id="r-num" value="0" class="w-16 text-right border rounded px-1" oninput="updateVal('r', true)"> mL/hr</span>
+                    </div>
+                    <input type="range" id="r" min="0" max="200" step="5" value="0" class="w-full" oninput="updateVal('r', false)">
+                </div>
+
+                <!-- Input Group: Infusion Na -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <div class="flex items-center gap-1 relative group">
+                            <label class="text-sm font-medium">Primary Infusion Na (Na_inf)</label>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 hover:text-blue-500 transition-colors cursor-help"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                            <div class="absolute bottom-full left-0 mb-2 w-56 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 z-50">
+                                Concentration of the infused fluid. Standard 3% Hypertonic Saline is ~513 mEq/L.
+                            </div>
+                        </div>
+                        <span class="text-sm font-bold text-blue-600"><input type="number" id="nainf-num" value="513" class="w-16 text-right border rounded px-1" oninput="updateVal('nainf', true)"> mEq/L</span>
+                    </div>
+                    <input type="range" id="nainf" min="154" max="1000" step="1" value="513" class="w-full" oninput="updateVal('nainf', false)">
+                </div>
+
+                <!-- Input Group: Clearance -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <div class="flex items-center gap-1 relative group">
+                            <label class="text-sm font-medium">Clearance (k)</label>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 hover:text-blue-500 transition-colors cursor-help"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                            <div class="absolute bottom-full left-0 mb-2 w-56 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 z-50">
+                                Total CRRT effluent flow rate. Determines how fast the patient's sodium exchanges with the dialysate.
+                            </div>
+                        </div>
+                        <span class="text-sm font-bold text-blue-600"><input type="number" id="k-num" value="2.0" class="w-16 text-right border rounded px-1" oninput="updateVal('k', true)"> L/hr</span>
+                    </div>
+                    <input type="range" id="k" min="0.5" max="5.0" step="0.1" value="2.0" class="w-full" oninput="updateVal('k', false)">
+                </div>
+
+                <!-- Input Group: Dialysate Na -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <div class="flex items-center gap-1 relative group">
+                            <label class="text-sm font-medium">Dialysate Na (Na_d)</label>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 hover:text-blue-500 transition-colors cursor-help"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                            <div class="absolute bottom-full left-0 mb-2 w-56 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 z-50">
+                                Sodium concentration of the CRRT fluid bags. Often customized by the pharmacy.
+                            </div>
+                        </div>
+                        <span class="text-sm font-bold text-blue-600"><input type="number" id="nad-num" value="140" class="w-16 text-right border rounded px-1" oninput="updateVal('nad', true)"> mEq/L</span>
+                    </div>
+                    <input type="range" id="nad" min="130" max="150" step="1" value="140" class="w-full" oninput="updateVal('nad', false)">
+                </div>
+
+                <!-- Input Group: Net UF -->
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <div class="flex items-center gap-1 relative group">
+                            <label class="text-sm font-medium">Net UF (Qnet)</label>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 hover:text-blue-500 transition-colors cursor-help"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                            <div class="absolute bottom-full left-0 mb-2 w-56 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 z-50">
+                                Net fluid removal rate. Does not change the steady state, but accelerates sodium changes as volume shrinks.
+                            </div>
+                        </div>
+                        <span class="text-sm font-bold text-blue-600"><input type="number" id="qnet-num" value="0" class="w-16 text-right border rounded px-1" oninput="updateVal('qnet', true)"> mL/hr</span>
+                    </div>
+                    <input type="range" id="qnet" min="0" max="500" step="10" value="0" class="w-full" oninput="updateVal('qnet', false)">
+                </div>
+
+                <!-- DYNAMIC: Additional Drips -->
+                <div class="border-t pt-4 mt-2">
+                    <div class="flex justify-between items-center mb-3">
+                        <div class="flex items-center gap-1 relative group">
+                            <label class="text-sm font-semibold text-slate-700">Additional Drips <span id="drip-counter-text" class="font-normal text-slate-500">(0/10)</span></label>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 hover:text-blue-500 transition-colors cursor-help"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                            <div class="absolute bottom-full left-0 mb-2 w-56 p-2 bg-slate-800 text-white text-xs rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 z-50">
+                                Add other concurrent fluids (e.g., normal saline, bicarbonate drips). The model automatically combines all infusions for a total sodium mass balance calculation.
+                            </div>
+                        </div>
+                        <button onclick="addDrip()" id="add-drip-btn" class="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition font-bold shadow-sm">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add
+                        </button>
+                    </div>
+                    
+                    <div id="additional-drips-container" class="space-y-3">
+                        <!-- Extra Drips injected here via JS -->
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Display Panel -->
+            <div class="lg:col-span-2 flex flex-col space-y-6">
+                
+                <!-- Steady State & Equation Highlight -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div id="ss-panel" class="bg-blue-50 p-4 rounded-lg border border-blue-100 flex flex-col justify-center items-center relative group">
+                        <span class="text-sm text-slate-500 font-semibold uppercase tracking-wider">Target Steady State (Na_ss)</span>
+                        <span class="text-4xl font-black text-blue-600 mt-1" id="nass-display">--</span>
+                        <span class="text-xs text-slate-400 mt-2">Flow-weighted average</span>
+                    </div>
+                    
+                    <div id="eq-panel" class="flex flex-col justify-center space-y-2 text-sm text-slate-600 p-2">
+                        <div id="eq-exp-container" class="active-eq">
+                            <span class="font-bold text-slate-800 block mb-1">Zero Net UF (Exponential)</span>
+                            <span class="font-mono text-xs">Na(t) = Na_ss + (Na₀ - Na_ss) × e<sup>-((R+k)/V)t</sup></span>
+                        </div>
+                        <div id="eq-pow-container" class="inactive-eq">
+                            <span class="font-bold text-slate-800 block mb-1">Active Net UF (Power-Law)</span>
+                            <span class="font-mono text-xs">Na(t) = Na_ss + (Na₀ - Na_ss) × (1 - Qnet·t/V)<sup>(R+k)/Qnet</sup></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart container -->
+                <div id="chart-panel" class="bg-white border rounded-lg p-4 flex-grow relative" style="min-height: 450px;">
+                    <canvas id="kineticsChart"></canvas>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- TOUR OVERLAY & TOOLTIP -->
+    <div id="tour-overlay" class="tour-overlay" onclick="endTour()"></div>
+    
+    <div id="tour-box" class="fixed z-50 bg-white rounded-xl shadow-2xl w-11/12 md:w-96 p-6 border-2 border-blue-400 flex flex-col justify-between hidden transform transition-all duration-300">
+        <div>
+            <div class="flex justify-between items-center mb-3 border-b pb-2">
+                <span class="text-xs font-bold text-blue-500 uppercase tracking-wider" id="tour-step-counter">Step 1 of 3</span>
+                <button onclick="endTour()" class="text-slate-400 hover:text-slate-700 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <h3 class="text-xl font-bold text-slate-800 mb-3" id="tour-title">Title</h3>
+            <p class="text-sm text-slate-600 leading-relaxed space-y-2" id="tour-content">Content</p>
+        </div>
+        <div class="flex justify-between items-center mt-6 pt-4 border-t">
+            <button onclick="prevStep()" id="tour-prev" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">Back</button>
+            <button onclick="nextStep()" id="tour-next" class="px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md transition">Next</button>
+        </div>
+    </div>
+
+    <script>
+        let chart = null;
+
+        // --- INTERACTIVE TOUR LOGIC ---
+        const tourSteps = [
+            {
+                targets: ['eq-panel'],
+                title: '1. The Core Concept',
+                text: 'This simulator uses the <strong>Law of Conservation of Mass</strong>.<br><br>It mathematically balances the sodium entering the body via infusion against the sodium exchanging via dialysate clearance. Depending on the Net UF, it automatically switches between an <strong>Exponential</strong> or <strong>Power-Law</strong> equation.'
+            },
+            {
+                targets: ['ss-panel', 'chart-panel'],
+                title: '2. Target Steady State',
+                text: 'Look at the <strong class="text-red-500">Red Dashed Line</strong> on the graph and the Steady State box.<br><br>This is the final equilibrium the patient will eventually reach. It is purely the flow-weighted average of fluids going in and out. <i>Notice how the black line (patient sodium) curves towards it over time.</i>'
+            },
+            {
+                targets: ['control-panel', 'chart-panel'],
+                title: '3. Real-Time Interactions',
+                text: '👉 <strong>Try adjusting the sliders right now!</strong> The graph is fully interactive in this mode.<br><br>• <strong>Infusions & Clearance:</strong> Change the target (Red Line). Clearance also drastically changes <i>speed</i>.<br>• <strong>Volume (V):</strong> Acts as "inertia". Larger volume flattens the curve, taking longer to reach the target.<br>• <strong>Net UF:</strong> Shrinks the volume over time, accelerating the rise in sodium later in the treatment.'
+            }
+        ];
+
+        let currentStep = 0;
+
+        function startTour() {
+            currentStep = 0;
+            document.getElementById('tour-overlay').classList.add('active');
+            document.getElementById('tour-box').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            showStep();
+        }
+
+        function showStep() {
+            document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'));
+            const step = tourSteps[currentStep];
+            step.targets.forEach(id => { document.getElementById(id).classList.add('tour-highlight'); });
+            document.getElementById('tour-step-counter').innerText = `Step ${currentStep + 1} of ${tourSteps.length}`;
+            document.getElementById('tour-title').innerHTML = step.title;
+            document.getElementById('tour-content').innerHTML = step.text;
+            document.getElementById('tour-prev').style.visibility = currentStep === 0 ? 'hidden' : 'visible';
+            document.getElementById('tour-next').innerText = currentStep === tourSteps.length - 1 ? 'Finish' : 'Next';
+            positionTourBox();
+        }
+
+        function positionTourBox() {
+            const box = document.getElementById('tour-box');
+            if (window.innerWidth < 1024) {
+                box.style.bottom = '20px'; box.style.left = '50%'; box.style.transform = 'translateX(-50%)'; box.style.top = 'auto';
+            } else {
+                box.style.transform = 'none';
+                if (currentStep === 0) { box.style.top = '100px'; box.style.left = '40%'; } 
+                else if (currentStep === 1) { box.style.top = '150px'; box.style.left = '10%'; } 
+                else if (currentStep === 2) { box.style.top = '30%'; box.style.left = '32%'; }
+            }
+        }
+
+        function nextStep() { currentStep < tourSteps.length - 1 ? (currentStep++, showStep()) : endTour(); }
+        function prevStep() { currentStep > 0 && (currentStep--, showStep()); }
+        function endTour() {
+            document.getElementById('tour-overlay').classList.remove('active');
+            document.getElementById('tour-box').classList.add('hidden');
+            document.querySelectorAll('.tour-highlight').forEach(el => el.classList.remove('tour-highlight'));
+        }
+
+        // --- MATH & SIMULATOR LOGIC ---
+
+        function updateVal(id, isNumInput) {
+            const slider = document.getElementById(id);
+            const num = document.getElementById(id + '-num');
+            if (isNumInput) {
+                let val = parseFloat(num.value);
+                if(val > parseFloat(slider.max)) val = slider.max;
+                if(val < parseFloat(slider.min)) val = slider.min;
+                slider.value = val;
+            } else {
+                num.value = slider.value;
+            }
+            calculateData();
+        }
+
+        // Dynamic Extra Drips
+        function addDrip() {
+            const container = document.getElementById('additional-drips-container');
+            if (container.children.length >= 10) return;
+
+            const dripId = 'drip-' + Date.now();
+            const html = `
+                <div id="${dripId}" class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm relative transition-all">
+                    <button onclick="removeDrip('${dripId}')" class="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full p-1 border border-red-200 hover:bg-red-600 hover:text-white shadow-sm transition" title="Remove Drip">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                    <div class="mb-2">
+                        <div class="flex justify-between mb-1">
+                            <label class="text-xs font-semibold text-slate-500">Rate (mL/hr)</label>
+                            <span class="text-xs font-bold text-blue-600"><input type="number" id="${dripId}-r-num" value="50" class="w-14 text-right border rounded px-1" oninput="updateDripVal('${dripId}', 'r', true)"></span>
+                        </div>
+                        <input type="range" id="${dripId}-r" min="0" max="500" step="5" value="50" class="w-full" oninput="updateDripVal('${dripId}', 'r', false)">
+                    </div>
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-xs font-semibold text-slate-500">Sodium (mEq/L)</label>
+                            <span class="text-xs font-bold text-blue-600"><input type="number" id="${dripId}-na-num" value="154" class="w-14 text-right border rounded px-1" oninput="updateDripVal('${dripId}', 'na', true)"></span>
+                        </div>
+                        <input type="range" id="${dripId}-na" min="0" max="1000" step="1" value="154" class="w-full" oninput="updateDripVal('${dripId}', 'na', false)">
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', html);
+            updateDripUI();
+            calculateData();
+        }
+
+        function removeDrip(id) {
+            document.getElementById(id).remove();
+            updateDripUI();
+            calculateData();
+        }
+
+        function updateDripVal(id, type, isNum) {
+            const slider = document.getElementById(`${id}-${type}`);
+            const num = document.getElementById(`${id}-${type}-num`);
+            if (isNum) {
+                let val = parseFloat(num.value);
+                if(val > parseFloat(slider.max)) val = slider.max;
+                if(val < parseFloat(slider.min)) val = slider.min;
+                slider.value = val;
+            } else {
+                num.value = slider.value;
+            }
+            calculateData();
+        }
+
+        function updateDripUI() {
+            const count = document.getElementById('additional-drips-container').children.length;
+            document.getElementById('drip-counter-text').innerText = `(${count}/10)`;
+            document.getElementById('add-drip-btn').style.display = count >= 10 ? 'none' : 'flex';
+        }
+
+        // Core Calculation Engine
+        function calculateData() {
+            const V = parseFloat(document.getElementById('v-num').value) || 45;
+            const Na0 = parseFloat(document.getElementById('na0-num').value) || 120;
+            const k = parseFloat(document.getElementById('k-num').value) || 2.0;
+            const Na_d = parseFloat(document.getElementById('nad-num').value) || 140;
+            const Qnet_mL = parseFloat(document.getElementById('qnet-num').value) || 0;
+            const Qnet = Qnet_mL / 1000;
+
+            // Gather Primary Infusion
+            let total_R_mL = parseFloat(document.getElementById('r-num').value) || 0;
+            let primary_Na = parseFloat(document.getElementById('nainf-num').value) || 0;
+            let total_Na_mass_in_per_hr = (total_R_mL / 1000) * primary_Na;
+
+            // Gather Additional Drips
+            const dripDivs = document.getElementById('additional-drips-container').children;
+            for (let i = 0; i < dripDivs.length; i++) {
+                const id = dripDivs[i].id;
+                const drip_R_mL = parseFloat(document.getElementById(`${id}-r-num`).value) || 0;
+                const drip_Na = parseFloat(document.getElementById(`${id}-na-num`).value) || 0;
+                
+                total_R_mL += drip_R_mL;
+                total_Na_mass_in_per_hr += (drip_R_mL / 1000) * drip_Na;
+            }
+
+            const R_total = total_R_mL / 1000; // L/hr
+            
+            // Update UI highlight for active equation & Update the R symbol based on multiple drips
+            const rSymbol = dripDivs.length > 0 ? 'R<sub>tot</sub>' : 'R';
+            if (Qnet_mL === 0) {
+                document.getElementById('eq-exp-container').className = "active-eq";
+                document.getElementById('eq-pow-container').className = "inactive-eq";
+            } else {
+                document.getElementById('eq-exp-container').className = "inactive-eq";
+                document.getElementById('eq-pow-container').className = "active-eq";
+            }
+
+            document.getElementById('eq-exp-container').innerHTML = `
+                <span class="font-bold text-slate-800 block mb-1">Zero Net UF (Exponential)</span>
+                <span class="font-mono text-xs">Na(t) = Na_ss + (Na₀ - Na_ss) × e<sup>-((${rSymbol}+k)/V)t</sup></span>
+            `;
+            document.getElementById('eq-pow-container').innerHTML = `
+                <span class="font-bold text-slate-800 block mb-1">Active Net UF (Power-Law)</span>
+                <span class="font-mono text-xs">Na(t) = Na_ss + (Na₀ - Na_ss) × (1 - Qnet·t/V)<sup>(${rSymbol}+k)/Qnet</sup></span>
+            `;
+
+            // Calculate Steady State (Flow-weighted average of ALL inputs and outputs)
+            const Na_ss = (total_Na_mass_in_per_hr + k * Na_d) / (R_total + k);
+            document.getElementById('nass-display').innerText = Na_ss.toFixed(1);
+
+            const labels = [];
+            const dataNa = [];
+            const dataSS = [];
+            
+            const totalFlow = R_total + k;
+            const expConstant = totalFlow / V;
+            const powerConstant = totalFlow / Qnet;
+
+            for (let t = 0; t <= 72; t++) {
+                labels.push(t + 'h');
+                dataSS.push(Na_ss);
+
+                let Na_t = 0;
+                let currentVolume = V - (Qnet * t);
+
+                if (currentVolume <= 5) { 
+                    dataNa.push(null);
+                    continue; 
+                }
+
+                if (Qnet === 0) {
+                    Na_t = Na_ss + (Na0 - Na_ss) * Math.exp(-expConstant * t);
+                } else {
+                    Na_t = Na_ss + (Na0 - Na_ss) * Math.pow((currentVolume / V), powerConstant);
+                }
+                dataNa.push(Na_t);
+            }
+
+            updateChartConfig(labels, dataNa, dataSS);
+        }
+
+        function updateChartConfig(labels, dataNa, dataSS) {
+            const ctx = document.getElementById('kineticsChart').getContext('2d');
+
+            if (chart) {
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = dataNa;
+                chart.data.datasets[1].data = dataSS;
+                chart.update();
+                return;
+            }
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Patient Serum Sodium',
+                            data: dataNa,
+                            borderColor: '#0f172a',
+                            backgroundColor: 'rgba(15, 23, 42, 0.05)',
+                            borderWidth: 3,
+                            pointRadius: 0,
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Target Steady State (Na_ss)',
+                            data: dataSS,
+                            borderColor: '#ef4444',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'top', labels: { font: { family: 'system-ui', weight: 'bold' } } },
+                        tooltip: { callbacks: { label: function(context) { return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + ' mEq/L'; } } }
+                    },
+                    scales: {
+                        y: { title: { display: true, text: 'Sodium (mEq/L)', font: {weight: 'bold'} }, suggestedMin: 120, suggestedMax: 155 },
+                        x: { title: { display: true, text: 'Time (Hours)', font: {weight: 'bold'} } }
+                    }
+                }
+            });
+        }
+
+        window.addEventListener('resize', () => {
+            if (!document.getElementById('tour-box').classList.contains('hidden')) positionTourBox();
+        });
+
+        window.onload = function() { calculateData(); };
+    </script>
+</body>
+</html>
