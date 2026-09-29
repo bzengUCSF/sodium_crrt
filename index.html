@@ -298,6 +298,8 @@
         function setFluidPreset(inputId, value) {
             document.getElementById(inputId).value = value;
             document.getElementById(inputId + '-num').value = value;
+            document.getElementById('r').value = 50;
+            document.getElementById('r-num').value = 50;
             calculateData();
         }
 
